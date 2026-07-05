@@ -1,0 +1,43 @@
+:root {
+  /* Backgrounds */
+  --bg:           #f8f9fb;
+  --surface:      #ffffff;
+  --surface-2:    #f1f3f7;
+  --border:       #d8dce6;
+  --border-light: #eaedf3;
+
+  /* Text */
+  --text:         #1a2133;
+  --text-muted:   #5a6a85;
+  --text-dim:     #8a9ab5;
+
+  /* Accent */
+  --accent:       #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-dim:   rgba(37, 99, 235, 0.08);
+
+  /* Semantic */
+  --success:      #059669;
+  --warning:      #d97706;
+  --danger:       #dc2626;
+  --info:         #0284c7;
+
+  /* Typography */
+  --font-sans:    'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  /* Sizing */
+  --max-content:  1100px;
+  --radius:       6px;
+  --radius-lg:    10px;
+
+  /* Fit verdict colors */
+  --verdict-strong:   #059669;
+  --verdict-partial:  #2563eb;
+  --verdict-uncertain:#d97706;
+  --verdict-poor:     #dc2626;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
