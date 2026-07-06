@@ -6,7 +6,78 @@
  * redirects, robots.txt honored, no cookies or auth forwarded.
  */
 import { lookup } from 'dns/promises';
-import { isPrivateAddress, validatePublicUrl } from '../src/lib/discovery/urlGuard';
+
+// ── SSRF guard ───────────────────────────────────────────────────────────────
+// Mirrored from src/lib/discovery/urlGuard.ts, which is the unit-tested source
+// of truth. Inlined here because Vercel transpiles this function per-file and
+// does not bundle cross-directory imports. Keep the two copies in sync.
+
+interface GuardResult {
+  ok: boolean;
+  reason?: string;
+}
+
+const BLOCKED_HOST_SUFFIXES = ['.local', '.internal', '.lan', '.home', '.corp', '.intranet'];
+const BLOCKED_HOSTS = new Set(['localhost', 'metadata.google.internal']);
+
+function isPrivateIPv4(ip: string): boolean {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+  const [a, b] = parts;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 198 && (b === 18 || b === 19)) return true;
+  if (a >= 224) return true;
+  return false;
+}
+
+function isPrivateIPv6(ip: string): boolean {
+  const lower = ip.toLowerCase().replace(/^\[|\]$/g, '');
+  if (lower === '::' || lower === '::1') return true;
+  if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true;
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
+  const v4Mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (v4Mapped) return isPrivateIPv4(v4Mapped[1]);
+  return false;
+}
+
+function isPrivateAddress(ip: string): boolean {
+  return ip.includes(':') ? isPrivateIPv6(ip) : isPrivateIPv4(ip);
+}
+
+function looksLikeIpLiteral(hostname: string): boolean {
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return true;
+  if (hostname.startsWith('[') || hostname.includes(':')) return true;
+  if (/^\d+$/.test(hostname)) return true;
+  if (/^0x[0-9a-f]+$/i.test(hostname)) return true;
+  return false;
+}
+
+function validatePublicUrl(raw: string): GuardResult {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { ok: false, reason: 'Not a valid URL' };
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return { ok: false, reason: `Scheme ${url.protocol} is not allowed` };
+  }
+  if (url.username || url.password) {
+    return { ok: false, reason: 'URLs with embedded credentials are not allowed' };
+  }
+  const hostname = url.hostname.toLowerCase();
+  if (BLOCKED_HOSTS.has(hostname)) return { ok: false, reason: 'Host is blocked' };
+  if (BLOCKED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix))) {
+    return { ok: false, reason: 'Internal-network hostnames are blocked' };
+  }
+  if (looksLikeIpLiteral(hostname)) return { ok: false, reason: 'IP-literal URLs are not allowed' };
+  if (!hostname.includes('.')) return { ok: false, reason: 'Single-label hostnames are blocked' };
+  return { ok: true };
+}
 
 const MAX_BYTES = 512 * 1024;
 const MAX_REDIRECTS = 3;
