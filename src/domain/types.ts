@@ -28,6 +28,8 @@ export interface ConstraintCoverage {
   disqualifyingConstraints: Constraint[];
 }
 
+export type LicenseClassification = 'osi-open-source' | 'source-available' | 'proprietary' | 'unknown';
+
 export interface Candidate {
   id: string;
   name: string;
@@ -35,6 +37,7 @@ export interface Candidate {
   repoUrl: string;
   projectUrl?: string;
   license: string;
+  licenseClassification?: LicenseClassification;
   lastRelease: string;
   stars: number;
   language: string;

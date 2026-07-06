@@ -26,6 +26,15 @@ export default function App() {
   const [activeView, setActiveView] = useState<ActiveView>('search');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  // Mobile nav overlay management
+  function openMobileNav() { document.body.style.overflow = 'hidden'; setMobileNavOpen(true); }
+  function closeMobileNav() { document.body.style.overflow = ''; setMobileNavOpen(false); }
+
+  function nav(view: ActiveView) {
+    setActiveView(view);
+    closeMobileNav();
+  }
+
   // ── Search state ────────────────────────────────────────────────────────────
   const [query, setQuery] = useState<SearchQuery | null>(null);
   const [constraints, setConstraints] = useState<Constraint[]>([]);
@@ -145,15 +154,18 @@ export default function App() {
     });
   }
 
-  function nav(view: ActiveView) {
-    setActiveView(view);
-    setMobileNavOpen(false);
-  }
-
   return (
     <div className={`app-shell${mobileNavOpen ? ' nav-mobile-open' : ''}`}>
       {/* ── Navigation ───────────────────────────────────────────────────────── */}
-      <nav className="nav" aria-label="Main navigation">
+      <nav className="nav" aria-label="Main navigation" onKeyDown={(e) => { if (e.key === 'Escape') closeMobileNav(); }}>
+        {/* Mobile backdrop overlay */}
+        {mobileNavOpen && (
+          <div
+            className="nav-backdrop"
+            onClick={closeMobileNav}
+            aria-hidden="true"
+          />
+        )}
         <div className="nav-inner">
           <a href="#" className="nav-brand" onClick={(e) => { e.preventDefault(); nav('search'); }}>
             <span>OSS</span><span className="accent">ensa</span>
@@ -170,7 +182,7 @@ export default function App() {
           </div>
           <button
             className="nav-hamburger"
-            onClick={() => setMobileNavOpen((v) => !v)}
+            onClick={() => mobileNavOpen ? closeMobileNav() : openMobileNav()}
             aria-expanded={mobileNavOpen}
             aria-label="Toggle navigation menu"
             type="button"
@@ -330,6 +342,18 @@ export default function App() {
           border-width: 0;
         }
       `}</style>
+
+      <footer className="risk-disclaimer">
+        <p>
+          <strong>OSSensa is a research aid, not a security certification.</strong>
+          Every candidate shows OSI open source, source-available, proprietary, or unknown classification;
+          provenance and official repository; maintenance and release activity;
+          known vulnerabilities (via <a href="https://osv.dev" target="_blank" rel="noopener">OSV</a>);
+          archived or abandoned status; installation and operating responsibility;
+          evidence freshness; and material unknowns.
+          Verify all claims against the project&rsquo;s own documentation before making decisions.
+        </p>
+      </footer>
     </div>
   );
 }

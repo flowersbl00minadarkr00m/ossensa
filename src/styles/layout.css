@@ -105,6 +105,14 @@ body {
 }
 
 /* ── Mobile nav drawer ──────────────────────────── */
+.nav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+}
+
 .nav-mobile-open .nav-links {
   display: flex;
   flex-direction: column;
@@ -197,3 +205,15 @@ body {
     padding: 20px 16px 48px;
   }
 }
+
+/* Risk disclaimer footer */
+.risk-disclaimer {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.risk-disclaimer p { margin: 0; }
+.risk-disclaimer a { color: var(--accent); text-decoration: underline; }

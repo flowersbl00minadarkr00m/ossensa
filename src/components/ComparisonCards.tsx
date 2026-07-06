@@ -168,7 +168,7 @@ export function ComparisonCards({ candidates, comparisons }: Props) {
         .cc-advantage-dd { color: var(--text); }
         .cc-disadvantage-dt { color: var(--danger) !important; }
         .cc-disadvantage-dd { color: var(--text); }
-        @media (max-width: 360px) {
+        @media (max-width: 600px) {
           .cc-dl { grid-template-columns: 1fr; }
           .cc-dl dt { padding-top: 10px; }
         }

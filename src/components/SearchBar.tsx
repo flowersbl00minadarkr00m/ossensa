@@ -92,7 +92,7 @@ export function SearchBar({ onSearch, loading, error }: Props) {
           </div>
         )}
 
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="search-import-row" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
             className="btn btn-secondary btn-sm"
@@ -153,6 +153,21 @@ export function SearchBar({ onSearch, loading, error }: Props) {
           .search-row .btn {
             width: 100%;
             justify-content: center;
+          }
+        }
+        @media (max-width: 600px) {
+          .search-bar-wrap .search-import-row {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 6px !important;
+          }
+          .search-bar-wrap .search-import-row .btn {
+            align-self: stretch;
+            justify-content: center;
+          }
+          .search-bar-wrap .search-import-row span {
+            font-size: 11px !important;
+            line-height: 1.4;
           }
         }
       `}</style>
