@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { extractConstraints, rankCandidates, applyResultCap, scoreCandidate } from '../src/domain/search';
+import { buildComparison } from '../src/domain/comparison';
+import { expandQueries } from '../src/lib/discovery/expandQueries';
 import type { Candidate, Constraint } from '../src/domain/types';
 
 function makeCandidate(partial: Partial<Candidate>): Candidate {
@@ -89,11 +91,70 @@ describe('rankCandidates + applyResultCap', () => {
     expect(ranked).toHaveLength(0);
   });
 
+  it('does not treat one generic keyword as satisfying a multi-part constraint', () => {
+    const candidate = makeCandidate({
+      description: 'Workflow orchestration for scheduled data pipelines',
+      deploymentModes: ['self-hosted'],
+    });
+    const constraint: Constraint = {
+      id: 'multi',
+      text: 'self-hosted workflow automation with REST API',
+      category: 'required',
+      createdAt: '',
+    };
+    expect(scoreCandidate(candidate, [constraint])).toBe(0);
+  });
+
   it('applyResultCap never exceeds cap regardless of input size', () => {
     const large = Array.from({ length: 20 }, (_, i) =>
       makeCandidate({ id: `l${i}`, name: `Tool${i}`, description: `self-hosted REST tool ${i}` }),
     );
     const capped = applyResultCap(rankCandidates(large, constraints));
     expect(capped.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('comparison credibility', () => {
+  it('normalizes fit independently of the number of required constraints', () => {
+    const constraints: Constraint[] = [
+      { id: 'one', text: 'self-hosted', category: 'required', createdAt: '' },
+      { id: 'two', text: 'REST API', category: 'required', createdAt: '' },
+      { id: 'three', text: 'TypeScript', category: 'preferred', createdAt: '' },
+    ];
+    const candidate = makeCandidate({
+      name: 'Complete match',
+      description: 'Self-hosted platform with a REST API',
+      language: 'TypeScript',
+    });
+    expect(buildComparison(candidate, constraints).fitVerdict).toBe('strong');
+  });
+
+  it('does not claim OSV coverage when no package identity was mapped', () => {
+    const comparison = buildComparison(makeCandidate({ evidence: [] }), []);
+    expect(comparison.unknowns.join(' ')).toContain('OSV');
+  });
+
+  it('can award a strong fit when every required constraint is met and none are preferred', () => {
+    const constraints: Constraint[] = [
+      { id: 'one', text: 'self-hosted', category: 'required', createdAt: '' },
+    ];
+    const comparison = buildComparison(
+      makeCandidate({ description: 'A self-hosted workflow platform' }),
+      constraints,
+    );
+    expect(comparison.fitVerdict).toBe('strong');
+  });
+});
+
+describe('query expansion', () => {
+  it('expands home appliance automation toward home automation projects', () => {
+    const { queries } = expandQueries({
+      id: 'q1',
+      naturalLanguage: 'home appliance automation',
+      constraints: [],
+      submittedAt: '',
+      source: 'manual',
+    });
+    expect(queries.some((query) => query.includes('home automation'))).toBe(true);
   });
 });

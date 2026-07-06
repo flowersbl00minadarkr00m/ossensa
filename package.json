@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint src",
-    "test": "vitest run tests/",
+    "test": "vitest run tests/search.test.ts tests/discovery.test.ts",
+    "benchmark": "vitest run tests/benchmark/benchmark.test.ts",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },

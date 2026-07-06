@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { Candidate, CandidateComparison } from '../domain/types';
 
 interface Props {
@@ -104,17 +105,17 @@ export function ComparisonCards({ candidates, comparisons }: Props) {
             </dd>
 
             {comp.advantages.map((a, i) => (
-              <>
-                <dt key={`adt-${i}`} className="cc-advantage-dt">Advantage +</dt>
-                <dd key={`add-${i}`} className="cc-advantage-dd">{a}</dd>
-              </>
+              <Fragment key={`advantage-${i}`}>
+                <dt className="cc-advantage-dt">Advantage +</dt>
+                <dd className="cc-advantage-dd">{a}</dd>
+              </Fragment>
             ))}
 
             {comp.disadvantages.map((d, i) => (
-              <>
-                <dt key={`ddt-${i}`} className="cc-disadvantage-dt">Disadvantage −</dt>
-                <dd key={`ddd-${i}`} className="cc-disadvantage-dd">{d}</dd>
-              </>
+              <Fragment key={`disadvantage-${i}`}>
+                <dt className="cc-disadvantage-dt">Disadvantage −</dt>
+                <dd className="cc-disadvantage-dd">{d}</dd>
+              </Fragment>
             ))}
           </dl>
         </div>

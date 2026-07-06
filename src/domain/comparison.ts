@@ -1,9 +1,12 @@
 import type { Candidate, CandidateComparison, Constraint } from './types';
 import { candidateMeetsConstraint, scoreCandidate } from './search';
 
-function deriveVerdict(score: number, requiredTotal: number): CandidateComparison['fitVerdict'] {
+function deriveVerdict(
+  score: number,
+  hasPreferredConstraints: boolean,
+): CandidateComparison['fitVerdict'] {
   if (score === -Infinity) return 'poor';
-  const norm = requiredTotal > 0 ? score / (requiredTotal * 2 + 1) : score / 3;
+  const norm = score / (hasPreferredConstraints ? 3 : 2);
   if (norm >= 0.8) return 'strong';
   if (norm >= 0.5) return 'partial';
   if (norm >= 0.2) return 'uncertain';
@@ -13,6 +16,9 @@ function deriveVerdict(score: number, requiredTotal: number): CandidateCompariso
 function setupEffortFromModes(
   modes: Candidate['deploymentModes'],
 ): CandidateComparison['setupEffort'] {
+  if (modes.includes('hosted') && modes.includes('self-hosted')) {
+    return { level: 'medium', explanation: 'Choose a hosted service for faster setup or self-host it for greater control.' };
+  }
   if (modes.includes('hosted')) {
     return { level: 'low', explanation: 'Hosted service — sign up and go, no infrastructure needed.' };
   }
@@ -23,6 +29,9 @@ function setupEffortFromModes(
 }
 
 function ongoingFromModes(modes: Candidate['deploymentModes']): string {
+  if (modes.includes('hosted') && modes.includes('self-hosted')) {
+    return 'The hosted option shifts operations to the vendor; self-hosting leaves upgrades, backups, and monitoring with you.';
+  }
   if (modes.includes('hosted')) return 'Vendor handles upgrades, backups, and scaling.';
   if (modes.includes('hybrid')) return 'Vendor manages core service; you own data and worker nodes.';
   return 'You own upgrades, patches, backups, monitoring, and capacity planning.';
@@ -52,7 +61,7 @@ export function buildComparison(
   const missedPreferred = preferred.filter((c) => !candidateMeetsConstraint(candidate, c));
 
   const score = scoreCandidate(candidate, constraints);
-  const verdict = deriveVerdict(score, required.length);
+  const verdict = deriveVerdict(score, preferred.length > 0);
 
   const advantages: string[] = [
     metRequired.length > 0
@@ -61,8 +70,12 @@ export function buildComparison(
     metPreferred.length > 0
       ? `Meets ${metPreferred.length} preferred constraint${metPreferred.length > 1 ? 's' : ''}`
       : null,
-    candidate.stars > 5000 ? `${candidate.stars.toLocaleString()} GitHub stars — strong community` : null,
-    candidate.license ? `${candidate.license} license` : null,
+    candidate.stars > 5000
+      ? `${candidate.stars.toLocaleString()} GitHub stars indicate substantial public interest, not project health`
+      : null,
+    candidate.licenseClassification === 'osi-open-source'
+      ? `${candidate.license} is classified as an OSI open-source licence`
+      : null,
   ].filter(Boolean) as string[];
 
   const disadvantages: string[] = [
@@ -79,10 +92,13 @@ export function buildComparison(
 
   const unknowns: string[] = [];
   if (!candidate.evidence.some((e) => e.source === 'OSV')) {
-    unknowns.push('Security vulnerability history not checked');
+    unknowns.push('No package identity was mapped to OSV, so vulnerability status is unknown');
   }
   if (!candidate.projectUrl) {
     unknowns.push('Official documentation site not confirmed');
+  }
+  if (candidate.id.startsWith('gh-')) {
+    unknowns.push('Deployment mode is inferred from the public repository and needs verification');
   }
 
   return {

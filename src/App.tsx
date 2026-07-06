@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type {
   ActiveView,
   Candidate,
@@ -12,14 +12,19 @@ import type {
 import { extractConstraints } from './domain/search';
 import { buildComparison } from './domain/comparison';
 import { loadHistory, saveHistory, addHistoryEntry, updateDecisionInHistory } from './domain/history';
-import { runDemoSearch, runLiveSearch } from './lib/searchOrchestrator';
+import { runDemoSearch, runLiveSearch, retrySource } from './lib/searchOrchestrator';
+import type { DiscoveryProgress, SearchCoverage } from './lib/discovery/types';
 import { augmentComparisons } from './lib/openrouterClient';
 import { SearchBar } from './components/SearchBar';
+import { SearchProgress } from './components/SearchProgress';
+import { CoveragePanel } from './components/CoveragePanel';
 import { ConstraintEditor } from './components/ConstraintEditor';
 import { CandidateCard } from './components/CandidateCard';
+import { CandidateDetail } from './components/CandidateDetail';
+import { ComparisonTable } from './components/ComparisonTable';
+import { ComparisonCards } from './components/ComparisonCards';
 import { HistoryView } from './components/HistoryView';
 import { SettingsView } from './components/SettingsView';
-import { DecisionPanel } from './components/DecisionPanel';
 
 export default function App() {
   // ── View state ──────────────────────────────────────────────────────────────
@@ -29,6 +34,17 @@ export default function App() {
   // Mobile nav overlay management
   function openMobileNav() { document.body.style.overflow = 'hidden'; setMobileNavOpen(true); }
   function closeMobileNav() { document.body.style.overflow = ''; setMobileNavOpen(false); }
+
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') closeMobileNav();
+    }
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   function nav(view: ActiveView) {
     setActiveView(view);
@@ -43,8 +59,12 @@ export default function App() {
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [demoMode, setDemoMode] = useState(true);
+  const [demoMode, setDemoMode] = useState(false);
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<SearchCoverage | null>(null);
+  const [progress, setProgress] = useState<DiscoveryProgress | null>(null);
+  const [retryingSource, setRetryingSource] = useState<string | null>(null);
 
   // ── History + settings ──────────────────────────────────────────────────────
   const [history, setHistory] = useState<SearchHistory[]>(() => loadHistory());
@@ -61,11 +81,28 @@ export default function App() {
 
     setLoading(true);
     setSearchError(null);
+    setProgress(null);
+    setCoverage(null);
 
     try {
-      const results = demoMode
-        ? await runDemoSearch(fullQuery)
-        : await runLiveSearch(fullQuery);
+      let results;
+      if (demoMode) {
+        results = await runDemoSearch(fullQuery);
+      } else {
+        const discovery = await runLiveSearch(fullQuery, { onProgress: setProgress });
+        results = discovery.candidates;
+        setCoverage(discovery.coverage);
+        if (results.length === 0) {
+          const failed = discovery.coverage.sources.filter(
+            (s) => s.status !== 'ok' && s.status !== 'empty',
+          );
+          if (failed.length === discovery.coverage.sources.length) {
+            setSearchError(
+              `No sources could be searched (${failed.map((s) => s.label).join(', ')}). Check your connection and retry — demo data is never substituted automatically.`,
+            );
+          }
+        }
+      }
 
       let comps = results.map((c) => buildComparison(c, activeConstraints));
 
@@ -84,6 +121,7 @@ export default function App() {
       setComparisons(comps);
       setDecisions([]);
       setSelectedForCompare([]);
+      setSelectedCandidateId(results[0]?.id ?? null);
 
       // Persist to history
       const entry: SearchHistory = {
@@ -103,8 +141,85 @@ export default function App() {
       setSearchError((err as Error).message ?? 'Search failed');
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   }, [demoMode, history, openRouterConfig]);
+
+  // ── Coverage: retry a single failed source (FR-008) ────────────────────────
+  async function handleRetrySource(sourceId: string) {
+    if (!query || !coverage) return;
+    setRetryingSource(sourceId);
+    try {
+      const merged = await retrySource(query, sourceId, { candidates, coverage });
+      setCandidates(merged.candidates);
+      setCoverage(merged.coverage);
+      setComparisons((prev) =>
+        merged.candidates.map(
+          (c) => prev.find((p) => p.candidateId === c.id) ?? buildComparison(c, constraints),
+        ),
+      );
+    } finally {
+      setRetryingSource(null);
+    }
+  }
+
+  // ── User corrections (FR-009) ───────────────────────────────────────────────
+  function setDismissed(id: string, dismissed: boolean) {
+    setCandidates((prev) => prev.map((c) => (c.id === id ? { ...c, dismissed } : c)));
+    if (dismissed && selectedCandidateId === id) setSelectedCandidateId(null);
+    setSelectedForCompare((prev) => prev.filter((x) => x !== id));
+  }
+
+  function handleMarkOfficial(id: string) {
+    setCandidates((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              projectUrl: c.repoUrl,
+              evidence: [
+                ...c.evidence,
+                {
+                  claim: 'Repository marked as the official project page',
+                  source: 'user',
+                  sourceUrl: c.repoUrl,
+                  retrievedAt: new Date().toISOString(),
+                  confidence: 'high' as const,
+                  sourceType: 'structured-metadata' as const,
+                  origin: 'user' as const,
+                },
+              ],
+            }
+          : c,
+      ),
+    );
+  }
+
+  function handleMergeSelected() {
+    if (selectedForCompare.length !== 2) return;
+    const [targetId, sourceId] = selectedForCompare;
+    const target = candidates.find((c) => c.id === targetId);
+    const source = candidates.find((c) => c.id === sourceId);
+    if (!target || !source) return;
+
+    const mergedCandidate = {
+      ...target,
+      aliases: [...new Set([...(target.aliases ?? []), source.name, ...(source.aliases ?? [])])],
+      conflicts: [...new Set([...(target.conflicts ?? []), ...(source.conflicts ?? [])])],
+      sources: [...new Set([...(target.sources ?? []), ...(source.sources ?? [])])],
+      evidence: [...target.evidence, ...source.evidence],
+    };
+    setCandidates((prev) =>
+      prev.filter((c) => c.id !== sourceId).map((c) => (c.id === targetId ? mergedCandidate : c)),
+    );
+    setComparisons((prev) =>
+      prev
+        .filter((p) => p.candidateId !== sourceId)
+        .map((p) => (p.candidateId === targetId ? buildComparison(mergedCandidate, constraints) : p)),
+    );
+    setSelectedForCompare([]);
+    setSelectedCandidateId(targetId);
+  }
 
   // ── Search initiation from SearchBar ────────────────────────────────────────
   function handleSearch(q: SearchQuery) {
@@ -141,6 +256,7 @@ export default function App() {
     setCandidates(entry.candidates);
     setComparisons(entry.comparisons);
     setDecisions(entry.decisions);
+    setSelectedCandidateId(entry.candidates[0]?.id ?? null);
     setActiveView('results');
     setMobileNavOpen(false);
   }
@@ -153,6 +269,20 @@ export default function App() {
       return [...prev, id];
     });
   }
+
+  const visibleCandidates = candidates.filter((candidate) => !candidate.dismissed);
+  const dismissedCandidates = candidates.filter((candidate) => candidate.dismissed);
+  const selectedCandidate =
+    visibleCandidates.find((candidate) => candidate.id === selectedCandidateId) ?? visibleCandidates[0];
+  const selectedComparison = selectedCandidate
+    ? comparisons.find((comparison) => comparison.candidateId === selectedCandidate.id)
+    : undefined;
+  const compareCandidates = visibleCandidates.filter((candidate) =>
+    selectedForCompare.includes(candidate.id),
+  );
+  const compareComparisons = comparisons.filter((comparison) =>
+    selectedForCompare.includes(comparison.candidateId),
+  );
 
   return (
     <div className={`app-shell${mobileNavOpen ? ' nav-mobile-open' : ''}`}>
@@ -224,7 +354,7 @@ export default function App() {
                   checked={demoMode}
                   onChange={(e) => setDemoMode(e.target.checked)}
                 />
-                Demo mode (uses synthetic candidates, no API calls)
+                Use demo data (synthetic candidates, no API calls)
               </label>
             </div>
           </div>
@@ -233,49 +363,52 @@ export default function App() {
         {/* Results view */}
         {activeView === 'results' && (
           <div>
-            <div className="section-header">
-              <h2 className="section-title">
-                Results
-                {candidates.length > 0 && (
-                  <span className="badge badge-count" style={{ marginLeft: 8 }}>
-                    {candidates.length} (max 5)
-                  </span>
-                )}
-              </h2>
-              <button className="btn btn-ghost btn-sm" onClick={() => nav('search')} type="button">
-                ← New search
-              </button>
-            </div>
-
-            {query && (
-              <div className="card" style={{ marginBottom: 20, padding: '12px 16px' }}>
-                <p style={{ margin: '0 0 6px', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                  Query
-                </p>
-                <p style={{ margin: 0, fontSize: 14, color: 'var(--text)' }}>{query.naturalLanguage}</p>
+            <header className="results-toolbar">
+              <div>
+                <span className="eyebrow">Software discovery</span>
+                <h1>{visibleCandidates.length} matches for your workflow</h1>
               </div>
-            )}
+              <button className="btn btn-secondary btn-sm" onClick={() => nav('search')} type="button">
+                New search
+              </button>
+              {query && <p className="results-query">{query.naturalLanguage}</p>}
+              <div className="filter-strip" aria-label="Active constraints">
+                {constraints.slice(0, 5).map((constraint) => (
+                  <span key={constraint.id} className={`filter-chip filter-${constraint.category}`}>
+                    {constraint.text}
+                  </span>
+                ))}
+                <button className="filter-edit" type="button" onClick={() => nav('search')}>
+                  Edit constraints
+                </button>
+              </div>
+            </header>
 
-            {constraints.length > 0 && (
-              <ConstraintEditor
-                constraints={constraints}
-                onChange={setConstraints}
-                onRerun={handleRerun}
-                loading={loading}
-              />
-            )}
-
-            {loading && (
+            {loading && progress && <SearchProgress progress={progress} />}
+            {loading && !progress && (
               <div className="loading-state">
                 <div className="spinner" />
                 Searching…
               </div>
             )}
 
-            {!loading && candidates.length === 0 && (
+            {!loading && coverage && (
+              <CoveragePanel
+                coverage={coverage}
+                onRetrySource={handleRetrySource}
+                retryingSource={retryingSource}
+              />
+            )}
+
+            {!loading && visibleCandidates.length === 0 && (
               <div className="empty-state">
-                <h3>No results</h3>
-                <p>Try adjusting your constraints or switching to demo mode.</p>
+                <h3>No verified results</h3>
+                <p>
+                  {coverage && coverage.gaps.length > 0
+                    ? 'Some sources could not be searched — expand the coverage report above to retry them.'
+                    : 'Try broadening your description or adjusting your constraints.'}
+                  {' '}Demo data is never substituted automatically.
+                </p>
               </div>
             )}
 
@@ -284,31 +417,90 @@ export default function App() {
               {!loading && candidates.length > 0 && `${candidates.length} result${candidates.length !== 1 ? 's' : ''} found`}
             </div>
 
-            {candidates.map((candidate, i) => {
-              const comp = comparisons.find((c) => c.candidateId === candidate.id);
-              if (!comp) return null;
-              return (
-                <div key={candidate.id}>
-                  <CandidateCard
-                    candidate={candidate}
-                    comparison={comp}
-                    index={i}
-                    isCapped={candidates.length >= 5}
-                    selected={selectedForCompare.includes(candidate.id)}
-                    onToggleSelect={() => toggleCompare(candidate.id)}
-                  />
-                  {query && (
-                    <DecisionPanel
-                      candidate={candidate}
-                      comparison={comp}
-                      query={query}
-                      existingDecision={decisions.find((d) => d.candidateId === candidate.id)}
-                      onDecide={handleDecide}
-                    />
-                  )}
+            {selectedForCompare.length > 0 && (
+              <section className="compare-board" aria-label="Candidate comparison">
+                <div className="section-header">
+                  <div>
+                    <span className="eyebrow">Comparison</span>
+                    <h2 className="section-title">{selectedForCompare.length} of 2 candidates selected</h2>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {selectedForCompare.length === 2 && (
+                      <button className="btn btn-secondary btn-sm" type="button" onClick={handleMergeSelected}>
+                        Merge duplicates
+                      </button>
+                    )}
+                    <button className="btn btn-ghost btn-sm" type="button" onClick={() => setSelectedForCompare([])}>
+                      Clear
+                    </button>
+                  </div>
                 </div>
-              );
-            })}
+                <div className="comparison-desktop">
+                  <ComparisonTable candidates={compareCandidates} comparisons={compareComparisons} />
+                </div>
+                <div className="comparison-mobile">
+                  <ComparisonCards candidates={compareCandidates} comparisons={compareComparisons} />
+                </div>
+              </section>
+            )}
+
+            {!loading && visibleCandidates.length > 0 && query && (
+              <div className="results-workspace">
+                <section className="result-list" aria-label="Search results">
+                  <div className="result-list-heading">
+                    <span>Best matches</span>
+                    <span>Ranked by constraint coverage</span>
+                  </div>
+                  {visibleCandidates.map((candidate, index) => {
+                    const comparison = comparisons.find((item) => item.candidateId === candidate.id);
+                    if (!comparison) return null;
+                    return (
+                      <CandidateCard
+                        key={candidate.id}
+                        candidate={candidate}
+                        comparison={comparison}
+                        index={index}
+                        active={candidate.id === selectedCandidate?.id}
+                        selected={selectedForCompare.includes(candidate.id)}
+                        compareDisabled={selectedForCompare.length >= 2}
+                        onSelect={() => setSelectedCandidateId(candidate.id)}
+                        onToggleSelect={() => toggleCompare(candidate.id)}
+                      />
+                    );
+                  })}
+                </section>
+                {selectedCandidate && selectedComparison && (
+                  <CandidateDetail
+                    key={selectedCandidate.id}
+                    candidate={selectedCandidate}
+                    comparison={selectedComparison}
+                    query={query}
+                    decision={decisions.find((decision) => decision.candidateId === selectedCandidate.id)}
+                    onDecide={handleDecide}
+                    onDismiss={() => setDismissed(selectedCandidate.id, true)}
+                    onMarkOfficial={() => handleMarkOfficial(selectedCandidate.id)}
+                  />
+                )}
+              </div>
+            )}
+
+            {!loading && dismissedCandidates.length > 0 && (
+              <section className="dismissed-list" aria-label="Dismissed results">
+                <h3>Dismissed</h3>
+                {dismissedCandidates.map((candidate) => (
+                  <div key={candidate.id} className="dismissed-item">
+                    <span>{candidate.name}</span>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      type="button"
+                      onClick={() => setDismissed(candidate.id, false)}
+                    >
+                      Restore
+                    </button>
+                  </div>
+                ))}
+              </section>
+            )}
           </div>
         )}
 
@@ -348,7 +540,7 @@ export default function App() {
           <strong>OSSensa is a research aid, not a security certification.</strong>
           Every candidate shows OSI open source, source-available, proprietary, or unknown classification;
           provenance and official repository; maintenance and release activity;
-          known vulnerabilities (via <a href="https://osv.dev" target="_blank" rel="noopener">OSV</a>);
+          package-specific vulnerability evidence when a reliable <a href="https://osv.dev" target="_blank" rel="noopener">OSV</a> identity is available;
           archived or abandoned status; installation and operating responsibility;
           evidence freshness; and material unknowns.
           Verify all claims against the project&rsquo;s own documentation before making decisions.

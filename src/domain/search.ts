@@ -57,15 +57,19 @@ export function candidateMeetsConstraint(candidate: Candidate, constraint: Const
     .join(' ')
     .toLowerCase();
 
-  // Split constraint text into meaningful words (≥3 chars)
-  const words = constraint.text
+  const qualifierWords = new Set([
+    'required', 'require', 'requires', 'must', 'should', 'prefer', 'preferred',
+    'without', 'avoid', 'exclude', 'cannot', 'never', 'acceptable',
+  ]);
+  const words = [...new Set(constraint.text
     .toLowerCase()
     .replace(/[^a-z0-9 ]/g, ' ')
     .split(/\s+/)
-    .filter((w) => w.length >= 3);
+    .filter((word) => word.length >= 3 && !qualifierWords.has(word)))];
 
-  // A constraint is "met" if ≥1 keyword appears in the candidate haystack
-  return words.some((w) => haystack.includes(w));
+  if (words.length === 0) return false;
+  const matchedWords = words.filter((word) => haystack.includes(word)).length;
+  return matchedWords >= Math.ceil(words.length * 0.6);
 }
 
 // ── Ranking ─────────────────────────────────────────────────────────────────
@@ -93,7 +97,12 @@ export function scoreCandidate(candidate: Candidate, constraints: Constraint[]):
       ? preferred.filter((c) => candidateMeetsConstraint(candidate, c)).length / preferred.length
       : 0;
 
-  return requiredScore * 2 + preferredScore;
+  // Unknowns and conflicts are penalized, never hidden (FR-007, NFR-004).
+  // Legacy candidates without a classification are not penalized.
+  const unknownPenalty = candidate.licenseClassification === 'unknown' ? 0.15 : 0;
+  const conflictPenalty = 0.1 * (candidate.conflicts?.length ?? 0);
+
+  return requiredScore * 2 + preferredScore - unknownPenalty - conflictPenalty;
 }
 
 /**

@@ -102,7 +102,7 @@ export function SearchBar({ onSearch, loading, error }: Props) {
             Import from Flowsensa
           </button>
           <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-            Paste a Flowsensa tooling-requirement JSON to pre-fill constraints
+            Choose a Flowsensa tooling-requirement JSON to pre-fill constraints
           </span>
           <input
             ref={fileRef}

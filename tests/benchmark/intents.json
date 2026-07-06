@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "gate": 0.75,
+  "description": "Versioned search-quality benchmark (FR-010). Each intent lists known credible open-source candidates; a hit is any expected name appearing in the top-5 comparison.",
+  "intents": [
+    {
+      "id": "home-automation",
+      "domain": "home automation",
+      "query": "home appliance automation for my house",
+      "expectedAny": ["home-assistant", "openhab", "domoticz", "homebridge", "esphome"]
+    },
+    {
+      "id": "workflow-automation",
+      "domain": "business workflows",
+      "query": "automate business workflows between web apps",
+      "expectedAny": ["n8n", "activepieces", "huginn", "node-red", "automatisch", "windmill"]
+    },
+    {
+      "id": "password-manager",
+      "domain": "security",
+      "query": "self-hosted password manager for a small team",
+      "expectedAny": ["vaultwarden", "bitwarden", "keepass", "passbolt", "padloc"]
+    },
+    {
+      "id": "photo-library",
+      "domain": "personal productivity",
+      "query": "photo backup and library with face recognition",
+      "expectedAny": ["immich", "photoprism", "librephotos", "damselfly", "lychee"]
+    },
+    {
+      "id": "note-taking",
+      "domain": "knowledge management",
+      "query": "note taking knowledge base with backlinks",
+      "expectedAny": ["joplin", "logseq", "trilium", "siyuan", "outline", "affine"]
+    },
+    {
+      "id": "dashboards",
+      "domain": "data",
+      "query": "data visualization dashboards for business metrics",
+      "expectedAny": ["grafana", "metabase", "superset", "redash", "lightdash"]
+    },
+    {
+      "id": "network-security",
+      "domain": "security",
+      "query": "network security monitoring and intrusion detection",
+      "expectedAny": ["suricata", "zeek", "wazuh", "snort", "security-onion", "securityonion", "crowdsec"]
+    },
+    {
+      "id": "video-editing",
+      "domain": "creative work",
+      "query": "video editing software for creators",
+      "expectedAny": ["kdenlive", "shotcut", "openshot", "olive", "blender", "flowblade"]
+    },
+    {
+      "id": "personal-finance",
+      "domain": "personal productivity",
+      "query": "track personal finances and budgeting",
+      "expectedAny": ["firefly", "actual", "gnucash", "maybe", "beancount", "ledger"]
+    },
+    {
+      "id": "file-sync",
+      "domain": "business workflows",
+      "query": "self-hosted file sync and sharing for documents",
+      "expectedAny": ["nextcloud", "syncthing", "seafile", "owncloud", "filebrowser"]
+    },
+    {
+      "id": "vector-database",
+      "domain": "developer tools",
+      "query": "vector database for semantic search and RAG",
+      "expectedAny": ["qdrant", "weaviate", "milvus", "chroma", "marqo", "vespa"]
+    },
+    {
+      "id": "media-server",
+      "domain": "personal productivity",
+      "query": "media server to stream my movie library",
+      "expectedAny": ["jellyfin", "kodi", "plex", "emby", "universal-media-server", "streama"]
+    }
+  ]
+}

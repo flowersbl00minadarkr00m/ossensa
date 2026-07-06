@@ -1,41 +1,32 @@
 :root {
-  /* Backgrounds */
-  --bg:           #f8f9fb;
-  --surface:      #ffffff;
-  --surface-2:    #f1f3f7;
-  --border:       #d8dce6;
-  --border-light: #eaedf3;
-
-  /* Text */
-  --text:         #1a2133;
-  --text-muted:   #5a6a85;
-  --text-dim:     #8a9ab5;
-
-  /* Accent */
-  --accent:       #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-dim:   rgba(37, 99, 235, 0.08);
-
-  /* Semantic */
-  --success:      #059669;
-  --warning:      #d97706;
-  --danger:       #dc2626;
-  --info:         #0284c7;
-
-  /* Typography */
-  --font-sans:    'Inter', 'Segoe UI', system-ui, sans-serif;
-  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
-
-  /* Sizing */
-  --max-content:  1100px;
-  --radius:       6px;
-  --radius-lg:    10px;
-
-  /* Fit verdict colors */
-  --verdict-strong:   #059669;
-  --verdict-partial:  #2563eb;
-  --verdict-uncertain:#d97706;
-  --verdict-poor:     #dc2626;
+  --bg: #dfe3f0;
+  --canvas: #eceef6;
+  --surface: #f8f9fc;
+  --surface-2: #eef0f7;
+  --surface-3: #e6e9f3;
+  --border: #cbd1e1;
+  --border-light: #dde1ec;
+  --text: #20263a;
+  --text-muted: #58637d;
+  --text-dim: #7b859e;
+  --accent: #5967f2;
+  --accent-hover: #4553dd;
+  --accent-dim: rgba(89, 103, 242, 0.11);
+  --accent-soft: #dfe3ff;
+  --success: #087f68;
+  --warning: #a8620a;
+  --danger: #b53a4b;
+  --info: #256eaa;
+  --font-sans: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, monospace;
+  --max-content: 1440px;
+  --radius: 8px;
+  --radius-lg: 14px;
+  --shadow: 0 18px 50px rgba(45, 52, 84, 0.13);
+  --verdict-strong: #087f68;
+  --verdict-partial: #4858dd;
+  --verdict-uncertain: #a8620a;
+  --verdict-poor: #b53a4b;
 }
 
 *, *::before, *::after {
