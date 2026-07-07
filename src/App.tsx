@@ -298,7 +298,7 @@ export default function App() {
         )}
         <div className="nav-inner">
           <a href="#" className="nav-brand" onClick={(e) => { e.preventDefault(); nav('search'); }}>
-            <span>OSS</span><span className="accent">ensa</span>
+            <span className="brand-os">OS</span><span className="brand-sensa">Sensa</span>
           </a>
           <div className={`nav-links${mobileNavOpen ? ' mobile-open' : ''}`}>
             <button className={`nav-link ${activeView === 'search' ? 'active' : ''}`} onClick={() => nav('search')} type="button">Search</button>
@@ -327,11 +327,12 @@ export default function App() {
         {/* Search view */}
         {activeView === 'search' && (
           <div>
-            <div style={{ marginBottom: 24 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 6px', color: 'var(--text)' }}>
+            <div className="search-hero">
+              <span className="eyebrow">Open-source discovery</span>
+              <h1>
                 Find open-source software
               </h1>
-              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}>
+              <p>
                 Describe what you need in plain language. We'll extract constraints and find the best matches.
               </p>
             </div>
@@ -347,8 +348,8 @@ export default function App() {
               />
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer' }}>
+            <div className="demo-toggle-row">
+              <label className="demo-toggle">
                 <input
                   type="checkbox"
                   checked={demoMode}

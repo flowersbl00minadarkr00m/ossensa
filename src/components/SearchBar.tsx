@@ -118,11 +118,14 @@ export function SearchBar({ onSearch, loading, error }: Props) {
 
       <style>{`
         .search-bar-wrap {
-          background: var(--surface);
-          border: 1px solid var(--border);
+          background:
+            linear-gradient(var(--surface), var(--surface)) padding-box,
+            linear-gradient(115deg, rgba(122,77,243,.45), rgba(14,159,143,.28), rgba(201,121,18,.28)) border-box;
+          border: 1px solid transparent;
           border-radius: var(--radius-lg);
           padding: 20px;
           margin-bottom: 24px;
+          box-shadow: 0 16px 38px rgba(45, 52, 84, 0.09);
         }
         .search-row {
           display: flex;
@@ -134,6 +137,7 @@ export function SearchBar({ onSearch, loading, error }: Props) {
           flex: 1;
           font-size: 15px;
           min-width: 0;
+          background: #fbfcff;
         }
         .sr-only {
           position: absolute;
