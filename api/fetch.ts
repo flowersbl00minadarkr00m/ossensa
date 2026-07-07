@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 /**
  * SSRF-guarded bounded public page fetch (design TD-006, NFR-001/NFR-002).
  *
