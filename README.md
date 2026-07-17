@@ -1,11 +1,12 @@
 # OSSensa
 
-Evidence-grounded open-source software discovery. Describe what you need in
-plain language — OSSensa extracts constraints, searches the public web,
-verifies candidates against retrieved evidence, and produces plain-language
-comparisons accessible to both developers and non-technical stakeholders.
+Describe what you need in plain language; get a ranked, evidence-backed shortlist of open-source software — with every claim traced to its source.
 
-**Live:** https://ossensa.vercel.app
+[**Live demo**](https://ossensa.vercel.app)
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+![OSSensa discovery](docs/assets/hero.png)
 
 ## How discovery works
 
@@ -15,78 +16,28 @@ your words → query expansion → source fan-out → identity resolution
            + a coverage report of what was searched, failed, or skipped
 ```
 
-Discovery sources (all keyless public APIs, called from your browser):
+Candidates come from GitHub, GitLab, Codeberg, npm, crates.io, Packagist, and Wikipedia, with vulnerability evidence from OSV.dev — all keyless public APIs called from your browser.
 
-| Source | Kind |
-|---|---|
-| GitHub, GitLab, Codeberg | repository forges |
-| npm, crates.io, Packagist | package registries |
-| Wikipedia | directory leads (must resolve to a verifiable identity) |
-| OSV.dev | vulnerability evidence |
+## Trust rules
 
-An optional serverless function (`api/fetch`) retrieves official-site and
-licence-file evidence that browser CORS blocks. It is SSRF-guarded (public
-DNS only, re-validated redirects, 512 KB cap, text-only, robots.txt honored)
-and returns extracted metadata, never raw pages. When it isn't deployed,
-the coverage report says so — evidence falls back to forge/registry metadata.
+- A candidate is labelled **OSI open source** only when SPDX metadata or a retrieved licence file supports it — AI output can't set it.
+- Conflicting claims are shown as conflicts, never silently resolved.
+- Every claim carries its source URL, retrieval time, and provenance type; demo data is never substituted for a failed live search.
 
-### Trust rules
-
-- A candidate is labelled **OSI open source** only when SPDX metadata or a
-  retrieved licence file supports it. Snippets and AI output can't set it.
-- Conflicting licence or identity claims are displayed as conflicts, never
-  silently resolved, and push the classification to *unknown*.
-- Every claim carries its source URL, retrieval time, and provenance type
-  (retrieved page / API metadata / search snippet / AI interpretation).
-- Demo data is never substituted for a failed live search.
-
-## Setup
+## Quick start
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173  (evidence proxy unavailable in vite dev — coverage reports the gap)
-vercel dev       # full stack including api/fetch
+npm run dev      # http://localhost:5173
+vercel dev       # full stack, including the evidence-retrieval function
 ```
 
-## Scripts
+Toggle **Demo mode** on the search screen to explore with synthetic candidates and no API calls. `npm test` runs the offline unit tests; `npm run test:e2e` runs Playwright with mocked sources.
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start dev server |
-| `npm run build` | Production build (typecheck + vite) |
-| `npm run lint` | oxlint |
-| `npm test` | Vitest unit tests (offline, fixture-based) |
-| `npm run benchmark` | Live search-quality benchmark (FR-010, network required, gate ≥75%) |
-| `npm run test:e2e` | Playwright e2e (discovery sources mocked) |
-| `npm run preview` | Preview production build |
+## How it's built
 
-## Demo mode
+A deterministic domain core (constraint matching, ranking) under `src/domain/`, discovery adapters and identity resolution under `src/lib/discovery/`, and an optional SSRF-guarded serverless function (`api/fetch.ts`) that retrieves licence and official-site evidence the browser can't reach. Optional AI summaries use your own OpenRouter key, held in session memory only.
 
-Toggle "Demo mode" on the search screen to use synthetic candidates without
-any API calls. Demo results are clearly labelled and never substituted for a
-failed live search.
+## License
 
-## OpenRouter BYOK
-
-Settings → OpenRouter connects your own API key for AI-augmented summaries.
-The key lives in session memory only — never persisted, logged, or sent to any
-OSSensa server (there are no OSSensa servers holding secrets).
-
-## Architecture
-
-See `.ai/sdd/specs/` for requirements/design/tasks (spec `002-web-discovery`
-covers the discovery pipeline).
-
-```
-src/
-  domain/          ← types, constraint matching, ranking (deterministic)
-  lib/discovery/   ← adapters, identity resolution, evidence, orchestrator, SSRF guard
-  lib/             ← OSV, SPDX, OpenRouter adapters
-  components/      ← React UI (search progress, coverage panel, results, detail)
-api/
-  fetch.ts         ← SSRF-guarded evidence retrieval (Vercel function)
-tests/
-  discovery.test.ts, search.test.ts   ← offline unit tests
-  benchmark/                          ← versioned live search-quality gate
-  e2e/                                ← Playwright with mocked sources
-```
+[MIT](LICENSE)
