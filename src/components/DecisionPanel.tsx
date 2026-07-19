@@ -189,7 +189,7 @@ export function DecisionPanel({ candidate, comparison, query, existingDecision, 
               onClick={() => { copyToClipboard(`mnemosync://task?ref=${encodeURIComponent(candidate.name)}&decision=${saved.action}`); }}
               type="button"
             >
-              Copy Mnemosync ref
+              Copy FindMnemo ref
             </button>
             <button
               className="btn btn-secondary btn-sm"
