@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { extractKeywords } from '../src/lib/discovery/expandQueries';
+import { extractKeywords, expandQueries, planAdapterQueries } from '../src/lib/discovery/expandQueries';
 import { stemWord, topicalMatch } from '../src/lib/discovery/relevance';
 import { resolveIdentities } from '../src/lib/discovery/resolveIdentities';
 import type { DiscoveryLead } from '../src/lib/discovery/types';
 import type { IntentTerms } from '../src/lib/discovery/relevance';
+import type { Constraint, SearchQuery } from '../src/domain/types';
 
 function lead(partial: Partial<DiscoveryLead>): DiscoveryLead {
   return {
@@ -13,6 +14,14 @@ function lead(partial: Partial<DiscoveryLead>): DiscoveryLead {
     sourceType: 'structured-metadata',
     ...partial,
   };
+}
+
+function constraint(text: string, category: Constraint['category'] = 'required'): Constraint {
+  return { id: text, text, category, createdAt: '' };
+}
+
+function query(text: string, constraints: Constraint[] = []): SearchQuery {
+  return { id: 'q', naturalLanguage: text, constraints, submittedAt: '', source: 'manual' };
 }
 
 // ── Idea #2a: salience-aware keyword extraction ──────────────────────────────
@@ -80,5 +89,45 @@ describe('topicalMatch stemming', () => {
     const id = identity('a self-hosted dashboard for team metrics');
     const off: IntentTerms = { phrases: [], words: ['calibre'] };
     expect(topicalMatch(id, off)).toBe(0);
+  });
+});
+
+// ── Idea #3: per-adapter query routing ───────────────────────────────────────
+
+describe('planAdapterQueries', () => {
+  it('gives registries the keyword query plus a single distinctive token', () => {
+    const ex = expandQueries(query('home appliance automation'));
+    const plan = planAdapterQueries('registry', ex, 2);
+    expect(plan).toEqual(['home appliance automation', 'home']);
+    // No multi-word category phrase is sent to name-biased registry search.
+    expect(plan.some((q) => q === 'smart home platform')).toBe(false);
+  });
+
+  it('gives forges the descriptive category phrases', () => {
+    const ex = expandQueries(query('home appliance automation'));
+    const plan = planAdapterQueries('forge', ex, 2);
+    expect(plan).toContain('home automation');
+    expect(plan).toContain('smart home platform');
+  });
+
+  it('rotates a required-constraint query into the forge set', () => {
+    // No category match, so phrases are empty and the constraint takes priority.
+    const ex = expandQueries(query('widget frobnicator', [constraint('rust')]));
+    const plan = planAdapterQueries('forge', ex, 2);
+    expect(plan[0]).toBe('rust');
+    expect(plan).toContain('widget frobnicator');
+  });
+
+  it('never leaves a source with no query when the intent has no category match', () => {
+    const ex = expandQueries(query('widget frobnicator'));
+    expect(planAdapterQueries('forge', ex, 2)).toEqual(['widget frobnicator']);
+    expect(planAdapterQueries('registry', ex, 2)).toEqual(['widget frobnicator', 'widget']);
+    expect(planAdapterQueries('directory', ex, 2).length).toBeGreaterThan(0);
+  });
+
+  it('is bounded by the limit and deterministic', () => {
+    const ex = expandQueries(query('home appliance automation'));
+    expect(planAdapterQueries('forge', ex, 2)).toHaveLength(2);
+    expect(planAdapterQueries('forge', ex, 2)).toEqual(planAdapterQueries('forge', ex, 2));
   });
 });

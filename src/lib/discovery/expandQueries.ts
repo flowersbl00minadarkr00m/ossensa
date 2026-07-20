@@ -1,4 +1,5 @@
 import type { Constraint, SearchQuery } from '../../domain/types';
+import type { SourceKind } from './types';
 
 const MAX_QUERIES = 6;
 
@@ -75,33 +76,75 @@ export interface ExpandedQueries {
   original: string;
   /** Bounded query set covering category names, synonyms, and constraints. */
   queries: string[];
+  /** The primary space-joined keyword query (may be ''). */
+  keywordQuery: string;
+  /** Multi-word category-expansion phrases. */
+  phraseQueries: string[];
+  /** Keyword queries derived from required constraints. */
+  constraintQueries: string[];
 }
 
 /**
  * Deterministic query expansion (FR-002). No AI required; AI-proposed queries
- * may be appended by the orchestrator, labeled as such.
+ * may be appended by the orchestrator, labeled as such. Returns both the flat
+ * bounded set (for intent-term building and coverage) and the typed buckets
+ * (for per-adapter routing — idea 003 #3).
  */
 export function expandQueries(query: SearchQuery): ExpandedQueries {
   const original = cleanIntent(query.naturalLanguage);
   const lower = original.toLowerCase();
-  const queries: string[] = [];
 
-  const keywords = extractKeywords(lower).join(' ');
-  if (keywords) queries.push(keywords);
+  const keywordQuery = extractKeywords(lower).join(' ');
 
+  const phraseQueries: string[] = [];
   for (const { pattern, expansions } of CATEGORY_EXPANSIONS) {
-    if (pattern.test(lower)) queries.push(...expansions);
+    if (pattern.test(lower)) phraseQueries.push(...expansions);
   }
 
-  // Required constraints contribute their own keyword queries
+  // Required constraints contribute their own keyword queries.
+  const constraintQueries: string[] = [];
   const requiredConstraints = query.constraints.filter(
     (c: Constraint) => c.category === 'required',
   );
   for (const constraint of requiredConstraints) {
     const constraintKeywords = extractKeywords(cleanIntent(constraint.text).toLowerCase(), 4).join(' ');
-    if (constraintKeywords && constraintKeywords !== keywords) queries.push(constraintKeywords);
+    if (constraintKeywords && constraintKeywords !== keywordQuery) constraintQueries.push(constraintKeywords);
   }
 
-  const deduped = [...new Set(queries.filter(Boolean))].slice(0, MAX_QUERIES);
-  return { original, queries: deduped };
+  const queries = [...new Set([keywordQuery, ...phraseQueries, ...constraintQueries].filter(Boolean))].slice(0, MAX_QUERIES);
+  return {
+    original,
+    queries,
+    keywordQuery,
+    phraseQueries: [...new Set(phraseQueries)],
+    constraintQueries: [...new Set(constraintQueries)],
+  };
+}
+
+/**
+ * Route queries to an adapter by kind (idea 003 #3). Registries (npm/crates/
+ * packagist) have name-biased search that handles phrases poorly, so they get
+ * the raw keyword query plus a single distinctive token. Forges (github/gitlab/
+ * codeberg) do well on descriptive phrases, so they get the category-phrase
+ * expansions with one required-constraint query rotated in. Directories fall
+ * back to the general set. The keyword query is always retained as a fallback
+ * so an intent outside the category table never leaves a source with no query.
+ * Deterministic and bounded by `limit`.
+ */
+export function planAdapterQueries(kind: SourceKind, expanded: ExpandedQueries, limit: number): string[] {
+  const { keywordQuery, phraseQueries, constraintQueries, queries } = expanded;
+  let plan: string[];
+  if (kind === 'registry') {
+    const singleWord = keywordQuery.split(' ').find(Boolean) ?? '';
+    plan = [keywordQuery, singleWord];
+  } else if (kind === 'forge') {
+    // Phrases first, then one rotated constraint query; keyword query backstops.
+    plan = [...phraseQueries, constraintQueries[0] ?? '', keywordQuery];
+  } else {
+    plan = [keywordQuery, phraseQueries[0] ?? '', ...queries];
+  }
+  const routed = [...new Set(plan.filter(Boolean))];
+  // Never leave a source empty when any query exists.
+  if (routed.length === 0 && queries.length > 0) routed.push(...queries);
+  return routed.slice(0, limit);
 }

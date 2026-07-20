@@ -7,7 +7,7 @@ import { npmAdapter } from './adapters/npm';
 import { cratesAdapter } from './adapters/crates';
 import { packagistAdapter } from './adapters/packagist';
 import { wikipediaAdapter } from './adapters/wikipedia';
-import { expandQueries } from './expandQueries';
+import { expandQueries, planAdapterQueries } from './expandQueries';
 import { resolveIdentities } from './resolveIdentities';
 import { buildIntentTerms, isCuratedListLead, scoreRelevance } from './relevance';
 import { deriveTopicFeedbackQueries } from './topicFeedback';
@@ -151,7 +151,8 @@ export async function runWebDiscovery(
     options.onProgress?.({ phase, sources: sourceStates.map((s) => ({ ...s })) });
 
   emit('expanding');
-  const { original, queries } = expandQueries(query);
+  const expanded = expandQueries(query);
+  const { original, queries } = expanded;
   if (queries.length === 0) {
     return {
       candidates: [],
@@ -172,7 +173,8 @@ export async function runWebDiscovery(
   emit('discovering');
   const outcomes = await Promise.allSettled(
     adapters.map(async (adapter, i) => {
-      const result = await runAdapter(adapter, queries, spent, budget);
+      const adapterQueries = planAdapterQueries(adapter.kind, expanded, QUERIES_PER_ADAPTER);
+      const result = await runAdapter(adapter, adapterQueries, spent, budget);
       sourceStates[i] = result.coverage;
       emit('discovering');
       return result;
