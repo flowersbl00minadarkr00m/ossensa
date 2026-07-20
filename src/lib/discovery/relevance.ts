@@ -28,6 +28,25 @@ export function buildIntentTerms(original: string, queries: string[]): IntentTer
   return { phrases, words };
 }
 
+/**
+ * Naive English stemmer: strips a trailing plural marker so "dashboards"
+ * matches "dashboard". Substring matching already handles the singular→plural
+ * direction, so this only adds the missing plural→singular case. Deliberately
+ * conservative (short words untouched) to avoid over-stemming.
+ */
+export function stemWord(word: string): string {
+  if (word.length > 4 && word.endsWith('es')) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+}
+
+/** A word matches text if the raw or stemmed form appears (substring). */
+function wordMatches(haystack: string, word: string): boolean {
+  if (haystack.includes(word)) return true;
+  const stem = stemWord(word);
+  return stem !== word && haystack.includes(stem);
+}
+
 /** Topical match strength between an identity and the intent. Zero = off-topic. */
 export function topicalMatch(identity: CandidateIdentity, terms: IntentTerms): number {
   const text = identity.leads
@@ -42,8 +61,8 @@ export function topicalMatch(identity: CandidateIdentity, terms: IntentTerms): n
     if (name.includes(phrase)) score += 2;
   }
   for (const word of terms.words) {
-    if (name.includes(word)) score += 2;
-    else if (text.includes(word)) score += 1;
+    if (wordMatches(name, word)) score += 2;
+    else if (wordMatches(text, word)) score += 1;
   }
   return score;
 }

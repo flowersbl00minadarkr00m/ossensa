@@ -29,6 +29,20 @@ const STOP_WORDS = new Set([
   'find', 'help', 'like', 'best', 'good', 'free', 'own', 'use', 'using',
 ]);
 
+/**
+ * Common but low-salience words. They are meaningful enough to survive the
+ * stopword filter, yet generic across most intents, so when the meaningful-word
+ * count exceeds the query cap we keep the *distinctive* (domain-specific) words
+ * first and let these fill any remaining slots. This stops a long intent from
+ * truncating a rare, defining term ("...like calibre") in favor of filler.
+ */
+const COMMON_WORDS = new Set([
+  'data', 'system', 'systems', 'server', 'servers', 'service', 'services',
+  'platform', 'manage', 'manager', 'management', 'web', 'local', 'self',
+  'hosted', 'host', 'online', 'simple', 'small', 'support', 'based', 'user',
+  'users', 'multiple', 'automatic', 'solution', 'project', 'library',
+]);
+
 /** Strip request framing so only the job description remains. */
 export function cleanIntent(naturalLanguage: string): string {
   return naturalLanguage
@@ -38,13 +52,22 @@ export function cleanIntent(naturalLanguage: string): string {
     .trim();
 }
 
-/** Meaningful keywords from the intent, capped for query use. */
+/**
+ * Meaningful keywords from the intent, capped for query use. When more
+ * meaningful words are present than the cap allows, distinctive
+ * (non-common) words are kept ahead of common filler so a defining late
+ * term survives truncation. Order is otherwise preserved and the result is
+ * deterministic. Below the cap, the original order is returned unchanged.
+ */
 export function extractKeywords(intent: string, cap = 5): string[] {
-  return intent
+  const words = intent
     .toLowerCase()
     .split(/\s+/)
-    .filter((word) => word.length >= 3 && !STOP_WORDS.has(word))
-    .slice(0, cap);
+    .filter((word) => word.length >= 3 && !STOP_WORDS.has(word));
+  if (words.length <= cap) return words;
+  const distinctive = words.filter((word) => !COMMON_WORDS.has(word));
+  const common = words.filter((word) => COMMON_WORDS.has(word));
+  return [...distinctive, ...common].slice(0, cap);
 }
 
 export interface ExpandedQueries {
