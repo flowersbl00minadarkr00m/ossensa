@@ -48,20 +48,29 @@ export function buildCoverage(args: {
   deadlineHit: boolean;
   unverifiedLeadCount: number;
   curatedFiltered?: number;
+  feedbackQueries?: string[];
 }): SearchCoverage {
+  const feedbackQueries = args.feedbackQueries ?? [];
+  const gaps = describeGaps(
+    args.sources,
+    args.proxyAvailable,
+    args.deadlineHit,
+    args.unverifiedLeadCount,
+    args.curatedFiltered ?? 0,
+  );
+  if (feedbackQueries.length > 0) {
+    gaps.push(
+      `Broadened the search with ${feedbackQueries.length} follow-up quer${feedbackQueries.length === 1 ? 'y' : 'ies'} from candidate topics: ${feedbackQueries.join(', ')}.`,
+    );
+  }
   return {
     sources: args.sources,
     startedAt: args.startedAt,
     finishedAt: new Date().toISOString(),
     budget: args.budget,
     spent: args.spent,
-    gaps: describeGaps(
-      args.sources,
-      args.proxyAvailable,
-      args.deadlineHit,
-      args.unverifiedLeadCount,
-      args.curatedFiltered ?? 0,
-    ),
+    gaps,
     unverifiedLeadCount: args.unverifiedLeadCount,
+    feedbackQueries: feedbackQueries.length > 0 ? feedbackQueries : undefined,
   };
 }

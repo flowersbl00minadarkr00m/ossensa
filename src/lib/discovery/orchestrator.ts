@@ -10,6 +10,7 @@ import { wikipediaAdapter } from './adapters/wikipedia';
 import { expandQueries } from './expandQueries';
 import { resolveIdentities } from './resolveIdentities';
 import { buildIntentTerms, isCuratedListLead, scoreRelevance } from './relevance';
+import { deriveTopicFeedbackQueries } from './topicFeedback';
 import { buildCandidate, probeEvidenceProxy } from './gatherEvidence';
 import { buildCoverage } from './coverage';
 import { attachCoverage } from './constraintCoverage';
@@ -17,6 +18,7 @@ import {
   AdapterError,
   DEFAULT_BUDGET,
   type BudgetSpend,
+  type CandidateIdentity,
   type DiscoveryBudget,
   type DiscoveryLead,
   type DiscoveryProgress,
@@ -39,6 +41,10 @@ const QUERIES_PER_ADAPTER = 2;
 const PER_SOURCE_TIMEOUT_MS = 8_000;
 const MAX_CANDIDATES_TO_VERIFY = 8;
 const FINAL_CAP = 5;
+/** Pseudo-relevance feedback (idea 003 #1): follow-up passes derived from
+ *  candidate topics, bounded so recall never runs away with the budget. */
+const MAX_FEEDBACK_QUERIES = 2;
+const FEEDBACK_POOL = 10;
 
 export interface DiscoveryResult {
   candidates: Candidate[];
@@ -190,14 +196,51 @@ export async function runWebDiscovery(
   }
 
   emit('resolving');
-  const { identities, unverifiedLeads } = resolveIdentities(allLeads);
+  const intentTerms = buildIntentTerms(original, queries);
+  const scoreAll = (ids: CandidateIdentity[]) =>
+    ids
+      .map((identity) => ({ identity, relevance: scoreRelevance(identity, intentTerms) }))
+      .sort((a, b) => b.relevance - a.relevance);
+
+  let resolution = resolveIdentities(allLeads);
+  let byRelevance = scoreAll(resolution.identities);
+
+  // Pseudo-relevance feedback (idea 003 #1): derive follow-up queries from the
+  // topics the on-topic candidates share, then run one bounded extra pass on a
+  // forge (topics are a forge concept). Off-topic candidates never contribute,
+  // so this broadens recall without importing noise. Best-effort and budgeted.
+  const usedFeedback: string[] = [];
+  const onTopic = byRelevance.filter((entry) => entry.relevance > 0).map((entry) => entry.identity);
+  const feedbackQueries = deriveTopicFeedbackQueries(onTopic.slice(0, FEEDBACK_POOL), intentTerms, MAX_FEEDBACK_QUERIES);
+  if (feedbackQueries.length > 0) {
+    const forge = adapters.find((a) => a.id === 'github') ?? adapters.find((a) => a.kind === 'forge');
+    if (forge) {
+      emit('discovering');
+      for (const fq of feedbackQueries) {
+        if (spent.requests >= budget.requests || Date.now() >= deadline) break;
+        spent.requests += 1;
+        try {
+          const batch = await forge.search(fq, timeoutSignal(PER_SOURCE_TIMEOUT_MS));
+          for (const lead of batch) {
+            if (isCuratedListLead(lead)) curatedFiltered += 1;
+            else allLeads.push(lead);
+          }
+          usedFeedback.push(fq);
+        } catch {
+          // Feedback is a recall bonus, never a failure mode — ignore and move on.
+        }
+      }
+    }
+    if (usedFeedback.length > 0) {
+      resolution = resolveIdentities(allLeads);
+      byRelevance = scoreAll(resolution.identities);
+    }
+  }
+
+  const { unverifiedLeads } = resolution;
 
   // Order verification by topical relevance to the intent, not raw popularity,
   // so an on-topic project outranks a bigger off-topic repo (benchmark gate).
-  const intentTerms = buildIntentTerms(original, queries);
-  const byRelevance = identities
-    .map((identity) => ({ identity, relevance: scoreRelevance(identity, intentTerms) }))
-    .sort((a, b) => b.relevance - a.relevance);
   const relevant = byRelevance.filter((entry) => entry.relevance > 0);
   const pool = (relevant.length > 0 ? relevant : byRelevance).map((entry) => entry.identity);
 
@@ -222,6 +265,7 @@ export async function runWebDiscovery(
     deadlineHit: Date.now() >= deadline,
     unverifiedLeadCount: unverifiedLeads.length,
     curatedFiltered,
+    feedbackQueries: usedFeedback,
   });
 
   emit('done');

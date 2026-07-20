@@ -97,6 +97,8 @@ export interface SearchCoverage {
   gaps: string[];
   /** Leads that could not be verified to a repo/registry identity. */
   unverifiedLeadCount: number;
+  /** Follow-up queries derived from candidate topics (pseudo-relevance feedback). */
+  feedbackQueries?: string[];
 }
 
 export type DiscoveryPhase =
