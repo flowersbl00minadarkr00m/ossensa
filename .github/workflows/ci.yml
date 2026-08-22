@@ -34,6 +34,6 @@ jobs:
       - name: Build app
         run: npm run build
       - name: Bundle serverless function
-        run: node node_modules/esbuild/bin/esbuild api/fetch.ts --bundle --platform=node --format=esm --outfile=/tmp/ossensa-fetch.mjs
+        run: npm exec -- esbuild api/fetch.ts --bundle --platform=node --format=esm --outfile=/tmp/ossensa-fetch.mjs
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
