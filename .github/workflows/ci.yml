@@ -33,6 +33,8 @@ jobs:
         run: npm test
       - name: Build app
         run: npm run build
+      - name: Check strict CSP compatibility
+        run: npm run check:csp-bundle
       - name: Bundle serverless function
         run: npm exec -- esbuild api/fetch.ts --bundle --platform=node --format=esm --outfile=/tmp/ossensa-fetch.mjs
       - name: Audit production dependencies

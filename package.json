@@ -4,17 +4,18 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "generate:validators": "node scripts/generate-validators.mjs",
+    "dev": "npm run generate:validators && vite",
+    "build": "npm run generate:validators && tsc -b && vite build",
+    "check:csp-bundle": "node scripts/check-csp-bundle.mjs",
     "lint": "oxlint src",
-    "test": "vitest run tests/search.test.ts tests/discovery.test.ts tests/topic-feedback.test.ts tests/recall-enhancements.test.ts",
+    "test": "npm run generate:validators && vitest run tests/search.test.ts tests/discovery.test.ts tests/topic-feedback.test.ts tests/recall-enhancements.test.ts tests/flowsensa-import.test.ts",
     "benchmark": "vitest run tests/benchmark/benchmark.test.ts",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
     "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1",
     "ipaddr.js": "^2.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
