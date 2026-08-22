@@ -8,6 +8,7 @@ import {
 import { describeGaps } from '../src/lib/discovery/coverage';
 import { buildIntentTerms, isCuratedListLead, scoreRelevance } from '../src/lib/discovery/relevance';
 import {
+  isPrivateAddress,
   isPrivateIPv4,
   isPrivateIPv6,
   validatePublicUrl,
@@ -152,10 +153,17 @@ describe('urlGuard', () => {
   });
 
   it('rejects private IPv6 forms', () => {
-    for (const ip of ['::1', 'fe80::1', 'fd00::1', '::ffff:192.168.0.1']) {
+    for (const ip of ['::1', 'fe80::1', 'fd00::1', 'ff02::1', '2001:db8::1', '::ffff:192.168.0.1']) {
       expect(isPrivateIPv6(ip), ip).toBe(true);
     }
     expect(isPrivateIPv6('2606:4700::6810:84e5')).toBe(false);
+  });
+
+  it('treats malformed and IPv4-mapped reserved addresses as unsafe', () => {
+    for (const ip of ['not-an-ip', '192.0.2.1', '::ffff:127.0.0.1', '::ffff:169.254.169.254']) {
+      expect(isPrivateAddress(ip), ip).toBe(true);
+    }
+    expect(isPrivateAddress('8.8.8.8')).toBe(false);
   });
 
   it('blocks unsafe URLs before any fetch', () => {

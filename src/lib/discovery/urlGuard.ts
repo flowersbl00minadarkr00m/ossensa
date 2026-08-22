@@ -2,6 +2,7 @@
  * Pure URL/IP safety validator shared by the client and the api/fetch
  * serverless function (NFR-001). No network access — fully unit-testable.
  */
+import ipaddr from 'ipaddr.js';
 
 export interface GuardResult {
   ok: boolean;
@@ -13,35 +14,21 @@ const BLOCKED_HOSTS = new Set(['localhost', 'metadata.google.internal']);
 
 /** True when an IPv4 address is loopback, private, link-local, CGNAT, or metadata. */
 export function isPrivateIPv4(ip: string): boolean {
-  const parts = ip.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) {
-    return true; // malformed — treat as unsafe
-  }
-  const [a, b] = parts;
-  if (a === 0 || a === 10 || a === 127) return true;            // this-net, private, loopback
-  if (a === 100 && b >= 64 && b <= 127) return true;            // CGNAT 100.64/10
-  if (a === 169 && b === 254) return true;                      // link-local + cloud metadata
-  if (a === 172 && b >= 16 && b <= 31) return true;             // private 172.16/12
-  if (a === 192 && b === 168) return true;                      // private 192.168/16
-  if (a === 198 && (b === 18 || b === 19)) return true;         // benchmarking
-  if (a >= 224) return true;                                    // multicast + reserved
-  return false;
+  if (!ipaddr.IPv4.isValid(ip)) return true;
+  return ipaddr.IPv4.parse(ip).range() !== 'unicast';
 }
 
 /** True when an IPv6 address is loopback, link-local, unique-local, or v4-mapped private. */
 export function isPrivateIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase().replace(/^\[|\]$/g, '');
-  if (lower === '::' || lower === '::1') return true;
-  if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true; // link-local fe80::/10
-  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local fc00::/7
-  const v4Mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (v4Mapped) return isPrivateIPv4(v4Mapped[1]);
-  return false;
+  const normalized = ip.replace(/^\[|\]$/g, '');
+  if (!ipaddr.IPv6.isValid(normalized)) return true;
+  return ipaddr.process(normalized).range() !== 'unicast';
 }
 
 /** True for any resolved address that must not be fetched. */
 export function isPrivateAddress(ip: string): boolean {
-  return ip.includes(':') ? isPrivateIPv6(ip) : isPrivateIPv4(ip);
+  if (!ipaddr.isValid(ip)) return true;
+  return ipaddr.process(ip).range() !== 'unicast';
 }
 
 function looksLikeIpLiteral(hostname: string): boolean {
